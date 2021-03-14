@@ -1,6 +1,7 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
 import * as fs from 'fs/promises';
+import * as chartnode from 'chartjs-node-canvas';
 
 interface Query {
     query: string
@@ -93,13 +94,79 @@ async function getContributions(login: string, startYear: number, endYear: numbe
     await file.close();
 }
 
-function main() {
+async function chart() {
+
+    const width = 400;
+    const height = 400;
+    const chartCallback = (ChartJS: any) => {
+
+        // Global config example: https://www.chartjs.org/docs/latest/configuration/
+        ChartJS.defaults.global.elements.rectangle.borderWidth = 2;
+        // Global plugin example: https://www.chartjs.org/docs/latest/developers/plugins.html
+        ChartJS.plugins.register({
+            // plugin implementation
+        });
+        // New chart type example: https://www.chartjs.org/docs/latest/developers/charts.html
+        ChartJS.controllers.MyType = ChartJS.DatasetController.extend({
+            // chart implementation
+        });
+    };
+    const chartJSNodeCanvas = new chartnode.ChartJSNodeCanvas({ width, height, chartCallback });
+
+    const configuration = {
+        type: 'bar',
+        data: {
+            labels: ['2003', '2004'],
+            datasets: [{
+                label: 'commit',
+                backgroundColor: 'rgba(255, 0, 0, 1.0)',
+                stack: 'proj 1',
+                data: [1, 5],
+            }, {
+                label: 'issue',
+                backgroundColor: 'rgba(0, 255, 0, 1.0)',
+                stack: 'proj 1',
+                data: [2, 7],
+            }, {
+                label: 'pr',
+                backgroundColor: 'rgba(0, 0, 255, 1.0)',
+                stack: 'proj 1',
+                data: [3, 3],
+            }, {
+                label: 'issue',
+                backgroundColor: 'rgba(0, 255, 0, 1.0)',
+                stack: 'proj 2',
+                data: [2, 7],
+            }]
+        },
+        options: {
+            scales: {
+                xAxes: [{
+                    stacked: true,
+                }],
+                yAxes: [{
+                    stacked: true
+                }]
+            }
+        }
+    };
+    const image = await chartJSNodeCanvas.renderToBuffer(configuration);
+    // const dataUrl = await chartJSNodeCanvas.renderToDataURL(configuration);
+    // const stream = chartJSNodeCanvas.renderToStream(configuration);
+
+    const file = await fs.open('output/out.png', 'w');
+    file.write(image);
+    file.close();
+}
+
+async function main() {
     dotenv.config();
     let ghUser = process.env.GITHUB_LIST_CONTRIB_USER;
     if (ghUser === undefined) {
         throw "env GITHUB_LIST_CONTRIB_USER not defined."
     }
-    getContributions(ghUser, 2012, 2021);
+    //getContributions(ghUser, 2012, 2021);
+    await chart();
 }
 
 main();
