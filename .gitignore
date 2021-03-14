@@ -1,4 +1,6 @@
 /dist/
+/output/
+/.env*
 /.yarn/*
 !/.yarn/releases
 !/.yarn/plugins

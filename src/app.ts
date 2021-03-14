@@ -1,12 +1,16 @@
 import axios from 'axios';
-
-let ghToken = 'bc639a3054f5bcb8bbd9ec71818bd35fece4e742'
+import dotenv from 'dotenv';
+import * as fs from 'fs/promises';
 
 interface Query {
     query: string
 }
 
 async function doFetch(gql: Query): Promise<string> {
+    let ghToken = process.env.GITHUB_API_TOKEN;
+    if (ghToken === undefined) {
+        throw "env GITHUB_API_TOKEN not defined."
+    }
     const headers = {
         'Content-type': 'application/json',
         'Authorization': 'token ' + ghToken,
@@ -20,85 +24,55 @@ async function doFetch(gql: Query): Promise<string> {
     return req.data;
 }
 
-async function getContributions(login: string) {
-    const gql = {
-        query: `
+async function getContributions(login: string, startYear: number, endYear: number) {
+    const filename = process.env.GITHUB_LIST_CONTRIB_OUTPUT_FILE;
+    if (filename === undefined) {
+        throw "env GITHUB_LIST_CONTRIB_OUTPUT_FILE not defined."
+    }
+    const file = await fs.open(filename, 'w');
+
+    for (let year = startYear; year < endYear; ++year) {
+        const yearStr = year.toString();
+        const gql = {
+            query: `
         {
             user(login: "${login}") {
-                contributionsCollection(from: "2016-06-01T00:00:00", to: "2016-12-01T00:00:00") {
+                contributionsCollection(from: "${yearStr}-01-01T00:00:00", to: "${yearStr}-12-31T23:59:59") {
                     issueContributionsByRepository(maxRepositories: 100) {
                         repository {
-                            name
+                            nameWithOwner
                         }
                         contributions(first: 100) {
-                            nodes {
-                                issue {
-                                    title
-                                }
+                            pageInfo {
+                                hasNextPage
                             }
+                            totalCount
                         }  
                     }
                 }
             }
-          }`}
-        //   {
-        //     user(login: "${login}") {
-        //         contributionsCollection(from: "2016-06-01T00:00:00", to: "2016-12-01T00:00:00") {
-        //             issueContributions(first: 100) {
-        //               nodes {
-        //                   issue {
-        //                       title
-        //                   }
-        //               }
-        //             }
-        //         }
-        //     }
-        //   }`}
-
-    //       {
-    //   user(login: "${login}") {
-    //     repositoriesContributedTo(first: 100, contributionTypes: [COMMIT, ISSUE, PULL_REQUEST, REPOSITORY]) {
-    //         totalCount
-    //             nodes {
-    //                 nameWithOwner
-    //             }
-    //         pageInfo {
-    //             endCursor
-    //             hasNextPage
-    //         }
-    //     }
-    //   }
-    // }`}
-
-    // {
-    //     user(login: "${login}") {
-    //       repositoriesContributedTo(orderBy: {field: UPDATED_AT, direction: ASC}, first: 10) {
-    //         edges {
-    //           node {
-    //             id
-    //             nameWithOwner
-    //             shortDescriptionHTML(limit: 120)
-    //             stargazers {
-    //               totalCount
-    //             }
-    //             url
-    //             openGraphImageUrl
-    //           }
-    //         }
-    //       }
-    //     }
-    //   }
-    //   `}
-  
-
-    let contrib = await doFetch(gql)
-    console.log(contrib);
-    //console.log((contrib as any).user.repositoriesContributedTo.edges);
+          }`};
+        const contrib: any = await doFetch(gql);
+        process.stdout.write('.');
+        for (let repo of contrib.data.user.contributionsCollection.issueContributionsByRepository) {
+            if (repo.contributions.pageInfo.hasNextPage) {
+                throw `paging not implemented (${repo.repository.nameWithOwner})`
+            }
+            file.write(`${yearStr},${login},${repo.repository.nameWithOwner},issues,${repo.contributions.totalCount}\n`);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    process.stdout.write('\n');
+    await file.close();
 }
 
 function main() {
-    console.log('main');
-    getContributions('cskeogh');
+    dotenv.config();
+    let ghUser = process.env.GITHUB_LIST_CONTRIB_USER;
+    if (ghUser === undefined) {
+        throw "env GITHUB_LIST_CONTRIB_USER not defined."
+    }
+    getContributions(ghUser, 2012, 2021);
 }
 
 main();
